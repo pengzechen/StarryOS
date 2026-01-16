@@ -108,6 +108,7 @@ qemu = [
 smp = ["axfeat/smp", "axplat-riscv64-visionfive2?/smp"]
 
 vf2 = ["dep:axplat-riscv64-visionfive2", "axfeat/driver-sdmmc"]
+sg2002 = ["dep:axplat-riscv64-sg2002", "axfeat/driver-ramdisk"]
 
 [dependencies]
 axdriver.workspace = true
@@ -132,6 +133,13 @@ starry-api.workspace = true
 version = "0.3"
 git = "https://github.com/Starry-OS/axplat-riscv64-visionfive2.git"
 tag = "dev-v03"
+features = ["fp-simd", "irq", "rtc"]
+optional = true
+
+[dependencies.axplat-riscv64-sg2002]
+version = "0.1"
+git = "https://github.com/pengzechen/axplat-riscv64-sg2002.git"
+rev = "a4c6672"
 features = ["fp-simd", "irq", "rtc"]
 optional = true
 
