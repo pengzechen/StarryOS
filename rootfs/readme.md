@@ -20,3 +20,13 @@ make ARCH=riscv CROSS_COMPILE=riscv64-linux-musl- CONFIG_PREFIX=$(pwd)/_install 
 ```bash
 fatload mmc 0:1 0x89000000  ext4_100m.img
 ```
+
+## 玄铁工具链
+make ARCH=riscv \
+     CROSS_COMPILE=riscv64-unknown-linux-musl- \
+     CFLAGS="-g -O0 -mcpu=c906fdv -march=rv64gcv0p7_zfh_xthead -mabi=lp64d" \
+     CXXFLAGS="-mcpu=c906fdv -march=rv64gcv0p7_zfh_xthead -mabi=lp64d" \
+     CONFIG_PREFIX=$(pwd)/_install \
+     install -j56
+
+riscv64-unknown-linux-musl-objdump -x -a -D _install/bin/busybox > res_xuan.txt

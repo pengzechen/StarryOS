@@ -75,6 +75,25 @@ fn mapping_flags(flags: xmas_elf::program::Flags) -> MappingFlags {
     mapping_flags
 }
 
+#[inline]
+fn flush_dcache_range(_start: usize, _len: usize) {
+    // If Zicbom is not supported, use fence to ensure memory ordering.
+    // This provides basic synchronization for memory-backed devices.
+    unsafe {
+        core::arch::asm!("fence iorw, iorw", options(nostack));
+    }
+}
+
+/// Flush instruction cache (C906)
+#[inline]
+fn flush_icache() {
+    unsafe {
+        // Ensure instruction fetch sees latest memory contents
+        core::arch::asm!("fence.i", options(nostack));
+    }
+}
+
+
 /// Map the elf file to the user address space.
 ///
 /// # Arguments
@@ -129,6 +148,8 @@ fn map_elf<'a>(
         )?;
 
         // TDOO: flush the I-cache
+        flush_dcache_range(vaddr, ph.file_size as usize);
+        flush_icache();
     }
 
     Ok(elf_parser)

@@ -23,6 +23,17 @@ use crate::{
     syscall::handle_syscall,
 };
 
+#[inline]
+pub fn cpu_spin_loops(mut loops: usize) {
+    while loops > 0 {
+        unsafe {
+            core::arch::asm!("nop", options(nostack, nomem));
+        }
+        loops -= 1;
+    }
+}
+
+
 /// Create a new user task.
 pub fn new_user_task(name: &str, mut uctx: UserContext, set_child_tid: usize) -> TaskInner {
     TaskInner::new(
@@ -40,14 +51,15 @@ pub fn new_user_task(name: &str, mut uctx: UserContext, set_child_tid: usize) ->
                 let reason = uctx.run();
 
                 set_timer_state(&curr, TimerState::Kernel);
-
+                info!("Returned to kernel: reason={reason:?} pc: {:#x}", uctx.ip());
+                cpu_spin_loops(10000);
                 match reason {
                     ReturnReason::Syscall => handle_syscall(&mut uctx),
                     ReturnReason::PageFault(addr, flags) => {
                         if !thr.proc_data.aspace.lock().handle_page_fault(addr, flags) {
                             info!(
-                                "{:?}: segmentation fault at {:#x} {:?}",
-                                thr.proc_data.proc, addr, flags
+                                "{:?}: segmentation fault at {:#x} {:?} pc:{:#x}",
+                                thr.proc_data.proc, addr, flags, uctx.ip()
                             );
                             raise_signal_fatal(SignalInfo::new_kernel(Signo::SIGSEGV))
                                 .expect("Failed to send SIGSEGV");
@@ -69,6 +81,12 @@ pub fn new_user_task(name: &str, mut uctx: UserContext, set_child_tid: usize) ->
                             ExceptionKind::IllegalInstruction => Signo::SIGILL,
                             _ => Signo::SIGTRAP,
                         };
+                        warn!(
+                            "{:?}: exception {:?} at ip={:#x}",
+                            thr.proc_data.proc,
+                            exc_info.kind(),
+                            uctx.ip()
+                        );
                         raise_signal_fatal(SignalInfo::new_kernel(signo))
                             .expect("Failed to send SIGTRAP");
                     }
