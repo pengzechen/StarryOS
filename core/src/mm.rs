@@ -75,6 +75,18 @@ fn mapping_flags(flags: xmas_elf::program::Flags) -> MappingFlags {
     mapping_flags
 }
 
+
+/// Flush instruction cache (C906)
+#[inline]
+fn flush_icache() {
+    unsafe {
+        // Ensure instruction fetch sees latest memory contents
+        core::arch::asm!(".long 0x0100000b"); // 15.1.13 ICACHE.IALL
+        core::arch::asm!(".long 0x01a0000b"); // 15.2.2 SYNC.I
+    }
+}
+
+
 /// Map the elf file to the user address space.
 ///
 /// # Arguments
@@ -129,6 +141,8 @@ fn map_elf<'a>(
         )?;
 
         // TDOO: flush the I-cache
+        // flush_dcache_range(vaddr, ph.file_size as usize);
+        flush_icache();
     }
 
     Ok(elf_parser)

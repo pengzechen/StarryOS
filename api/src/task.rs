@@ -37,6 +37,11 @@ pub fn new_user_task(name: &str, mut uctx: UserContext, set_child_tid: usize) ->
 
             let thr = curr.as_thread();
             while !thr.pending_exit() {
+                unsafe {
+                    // Ensure instruction fetch sees latest memory contents
+                    core::arch::asm!(".long 0x0100000b"); // 15.1.13 ICACHE.IALL
+                    core::arch::asm!(".long 0x01a0000b"); // 15.2.2 SYNC.I
+                }
                 let reason = uctx.run();
 
                 set_timer_state(&curr, TimerState::Kernel);
@@ -46,8 +51,11 @@ pub fn new_user_task(name: &str, mut uctx: UserContext, set_child_tid: usize) ->
                     ReturnReason::PageFault(addr, flags) => {
                         if !thr.proc_data.aspace.lock().handle_page_fault(addr, flags) {
                             info!(
-                                "{:?}: segmentation fault at {:#x} {:?}",
-                                thr.proc_data.proc, addr, flags
+                                "{:?}: segmentation fault at {:#x} {:?} pc:{:#x}",
+                                thr.proc_data.proc,
+                                addr,
+                                flags,
+                                uctx.ip()
                             );
                             raise_signal_fatal(SignalInfo::new_kernel(Signo::SIGSEGV))
                                 .expect("Failed to send SIGSEGV");
@@ -69,6 +77,12 @@ pub fn new_user_task(name: &str, mut uctx: UserContext, set_child_tid: usize) ->
                             ExceptionKind::IllegalInstruction => Signo::SIGILL,
                             _ => Signo::SIGTRAP,
                         };
+                        warn!(
+                            "{:?}: exception {:?} at ip={:#x}",
+                            thr.proc_data.proc,
+                            exc_info.kind(),
+                            uctx.ip()
+                        );
                         raise_signal_fatal(SignalInfo::new_kernel(signo))
                             .expect("Failed to send SIGTRAP");
                     }
