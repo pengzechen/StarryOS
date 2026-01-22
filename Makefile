@@ -1,7 +1,7 @@
 # Build Options
 export ARCH := riscv64
 export LOG := warn
-export DWARF := y
+export DWARF := n
 export MEMTRACK := n
 
 # QEMU Options

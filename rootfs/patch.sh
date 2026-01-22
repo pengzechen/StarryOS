@@ -48,9 +48,26 @@ bitflags::bitflags! {
         /// Indicates the virtual page has been written since the last time the
         /// D bit was cleared.
         const D =   1 << 7;
+        /// xuantie-c9xx specific flags
+        /// SO, C, B defined both in XuanTie-Openc910 and XuanTie-C906
+        /// SH only defined in XuanTie-Openc910
+        // SO– Strong ordered memory (1 << 63)
+        // #[cfg(feature = "xuantie-c9xx")]
+        const SO =  (1 << 63);
+        // C – Cacheable  (1 << 62)
+        // #[cfg(feature = "xuantie-c9xx")]
+        const C =   (1 << 62);
+        // B – Bufferable (1 << 61)
+        // #[cfg(feature = "xuantie-c9xx")]
+        const B =   (1 << 61);
+        // SH– Shareable  (1 << 60) 
+        // #[cfg(feature = "xuantie-c9xx")]
+        const SH =  (1 << 60);
 
-        const SG2002_KERNEL =  (0x7 << 60);
-        const SG2002_DEVICE =  (1 << 63) | (1 << 60);
+        // #[cfg(feature = "xuantie-c9xx")]
+        const XUANTIE_C9XX_DEVICE = Self::SO.bits() | Self::B.bits();
+        // #[cfg(feature = "xuantie-c9xx")]
+        const XUANTIE_C9XX_KERNEL = Self::C.bits() | Self::B.bits() | Self::SH.bits();
     }
 }
 
@@ -81,7 +98,7 @@ impl From<MappingFlags> for PTEFlags {
         if f.is_empty() {
             return Self::empty();
         }
-        let mut ret = Self::V;
+        let mut ret = Self::V | Self::A | Self::D;
         if f.contains(MappingFlags::READ) {
             ret |= Self::R;
         }
@@ -93,6 +110,15 @@ impl From<MappingFlags> for PTEFlags {
         }
         if f.contains(MappingFlags::USER) {
             ret |= Self::U;
+        }
+
+        // #[cfg(feature = "xuantie-c9xx")]
+        {
+            if f.contains(MappingFlags::DEVICE) {
+                ret |= Self::XUANTIE_C9XX_DEVICE;
+            } else if !f.contains(MappingFlags::USER) {
+                ret |= Self::XUANTIE_C9XX_KERNEL;
+            }
         }
         ret
     }
@@ -115,24 +141,13 @@ impl Rv64PTE {
 
 impl GenericPTE for Rv64PTE {
     fn new_page(paddr: PhysAddr, mflags: MappingFlags, _is_huge: bool) -> Self {
-        let flags = PTEFlags::from(mflags) | PTEFlags::A | PTEFlags::D;
-        if mflags.contains(MappingFlags::DEVICE) {
-            let device_flags = PTEFlags::SG2002_DEVICE | flags;
-            Self(device_flags.bits() as u64
-                | ((paddr.as_usize() >> 2) as u64 & Self::PHYS_ADDR_MASK))
-        } else if mflags.contains(MappingFlags::USER) {
-            Self(flags.bits() as u64
-                | ((paddr.as_usize() >> 2) as u64 & Self::PHYS_ADDR_MASK))
-        } else {
-            let kernel_flags = PTEFlags::SG2002_KERNEL | flags;
-            Self(kernel_flags.bits() as u64
-                | ((paddr.as_usize() >> 2) as u64 & Self::PHYS_ADDR_MASK))
-        }
+        let flags = PTEFlags::from(mflags);
+        debug_assert!(flags.intersects(PTEFlags::R | PTEFlags::X));
+        Self(flags.bits() as u64 | ((paddr.as_usize() >> 2) as u64 & Self::PHYS_ADDR_MASK))
     }
 
     fn new_table(paddr: PhysAddr) -> Self {
-        Self(PTEFlags::V.bits() as u64
-            | ((paddr.as_usize() >> 2) as u64 & Self::PHYS_ADDR_MASK))
+        Self(PTEFlags::V.bits() as u64 | ((paddr.as_usize() >> 2) as u64 & Self::PHYS_ADDR_MASK))
     }
 
     fn paddr(&self) -> PhysAddr {
@@ -149,7 +164,7 @@ impl GenericPTE for Rv64PTE {
     }
 
     fn set_flags(&mut self, flags: MappingFlags, _is_huge: bool) {
-        let flags = PTEFlags::from(flags) | PTEFlags::A | PTEFlags::D;
+        let flags = PTEFlags::from(flags);
         debug_assert!(flags.intersects(PTEFlags::R | PTEFlags::X));
         self.0 = (self.0 & Self::PHYS_ADDR_MASK) | flags.bits() as u64;
     }
@@ -167,8 +182,7 @@ impl GenericPTE for Rv64PTE {
     }
 
     fn is_huge(&self) -> bool {
-        PTEFlags::from_bits_truncate(self.0 as usize)
-            .intersects(PTEFlags::R | PTEFlags::X)
+        PTEFlags::from_bits_truncate(self.0 as usize).intersects(PTEFlags::R | PTEFlags::X)
     }
 
     fn clear(&mut self) {
