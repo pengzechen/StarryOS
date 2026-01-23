@@ -116,7 +116,7 @@ impl From<MappingFlags> for PTEFlags {
         {
             if f.contains(MappingFlags::DEVICE) {
                 ret |= Self::XUANTIE_C9XX_DEVICE;
-            } else if !f.contains(MappingFlags::USER) {
+            } else {
                 ret |= Self::XUANTIE_C9XX_KERNEL;
             }
         }

@@ -5,6 +5,7 @@ use axhal::uspace::{ExceptionKind, ReturnReason, UserContext};
 use axtask::{TaskInner, current};
 use bytemuck::AnyBitPattern;
 use linux_raw_sys::general::ROBUST_LIST_LIMIT;
+use memory_addr::VirtAddr;
 use starry_core::{
     futex::FutexKey,
     shm::SHM_MANAGER,
@@ -22,6 +23,43 @@ use crate::{
     signal::{check_signals, unblock_next_signal},
     syscall::handle_syscall,
 };
+
+pub fn hexdump(data: &[u8], mut start_addr: usize) {
+    const PRELAND_WIDTH: usize = 70;
+    ax_println!("{:-^1$}", " hexdump ", PRELAND_WIDTH);
+    for offset in (0..data.len()).step_by(16) {
+        ax_print!("{:08x} ", start_addr);
+        start_addr += 0x10;
+        for i in 0..16 {
+            if offset + i < data.len() {
+                ax_print!("{:02x} ", data[offset + i]);
+            } else {
+                ax_print!("{:02} ", "");
+            }
+        }
+
+        ax_print!("{:>6}", ' ');
+
+        for i in 0..16 {
+            if offset + i < data.len() {
+                let c = data[offset + i];
+                if c >= 0x20 && c <= 0x7e {
+                    ax_print!("{}", c as char);
+                } else {
+                    ax_print!(".");
+                }
+            } else {
+                ax_print!("{:02} ", "");
+            }
+        }
+
+        ax_println!("");
+    }
+    ax_println!("{:-^1$}", " hexdump end ", PRELAND_WIDTH);
+}
+
+
+
 
 /// Create a new user task.
 pub fn new_user_task(name: &str, mut uctx: UserContext, set_child_tid: usize) -> TaskInner {
@@ -83,6 +121,35 @@ pub fn new_user_task(name: &str, mut uctx: UserContext, set_child_tid: usize) ->
                             exc_info.kind(),
                             uctx.ip()
                         );
+                        warn!("stval = {:#?}", exc_info);
+                        let mut buf = [0u8; 1024];
+                        let _ = thr
+                            .proc_data
+                            .aspace
+                            .lock()
+                            .read(VirtAddr::from_usize(uctx.ip()), &mut buf);
+                        info!("code bytes: {:02x?}", &buf[..16]);
+
+                        hexdump(&buf[..1024], uctx.ip());
+                        let value: usize;
+                        unsafe {
+                            core::arch::asm!(
+                                "csrr {0}, sstatus",
+                                out(reg) value,
+                                options(nomem, nostack, preserves_flags),
+                            );
+                        }
+                        info!("sstatus = {:#018x}", value);
+                        let scause: usize;
+                        unsafe {
+                            core::arch::asm!(
+                                "csrr {0}, scause",
+                                out(reg) scause,
+                                options(nomem, nostack, preserves_flags),
+                            );
+                        }
+                        info!("scause = {:#018x}", scause);
+                        // 1000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0101
                         raise_signal_fatal(SignalInfo::new_kernel(signo))
                             .expect("Failed to send SIGTRAP");
                     }
