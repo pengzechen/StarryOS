@@ -3,6 +3,7 @@
 #[cfg(feature = "input")]
 mod event;
 mod fb;
+mod ion;
 #[cfg(feature = "dev-log")]
 mod log;
 mod r#loop;
@@ -10,6 +11,7 @@ mod r#loop;
 mod memtrack;
 mod rtc;
 pub mod tty;
+pub mod tpu;
 
 use alloc::{format, sync::Arc};
 use core::any::Any;
@@ -229,6 +231,27 @@ fn builder(fs: Arc<SimpleFs>) -> DirMaker {
     );
 
     root.add(
+        "cvi-tpu0",
+        Device::new(
+            fs.clone(),
+            NodeType::CharacterDevice,
+            DeviceId::new(240, 0),
+            Arc::new(unsafe { tpu::TpuDevice::new() }),
+        ),
+    );
+
+    // Ion device
+    root.add(
+        "ion",
+        Device::new(
+            fs.clone(),
+            NodeType::CharacterDevice,
+            DeviceId::new(10, 56), // Ion 设备的标准设备号
+            Arc::new(ion::IonDevice::new()),
+        ),
+    );
+
+    root.add(
         "ptmx",
         Device::new(
             fs.clone(),
@@ -294,6 +317,8 @@ fn builder(fs: Arc<SimpleFs>) -> DirMaker {
         "input",
         SimpleDir::new_maker(fs.clone(), Arc::new(event::input_devices(fs.clone()))),
     );
+
+
 
     SimpleDir::new_maker(fs, Arc::new(root))
 }
