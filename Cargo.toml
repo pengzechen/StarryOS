@@ -46,6 +46,7 @@ axnet = { path = "arceos/modules/axnet" }
 axruntime = { path = "arceos/modules/axruntime" }
 axsync = { path = "arceos/modules/axsync" }
 axtask = { path = "arceos/modules/axtask" }
+axdma = { path = "arceos/modules/axdma" }
 
 axbacktrace = "0.1"
 axerrno = "0.2"

@@ -18,6 +18,7 @@ axalloc.workspace = true
 axbacktrace.workspace = true
 axconfig.workspace = true
 axdisplay.workspace = true
+axdma.workspace = true
 axdriver.workspace = true
 axerrno.workspace = true
 axfeat.workspace = true

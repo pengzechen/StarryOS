@@ -264,6 +264,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "axdma"
+version = "0.2.0"
+dependencies = [
+ "allocator",
+ "axalloc",
+ "axconfig",
+ "axerrno 0.2.2",
+ "axhal",
+ "axmm",
+ "kspin",
+ "log",
+ "memory_addr",
+]
+
+[[package]]
 name = "axdriver"
 version = "0.2.0"
 dependencies = [
@@ -2189,6 +2204,7 @@ dependencies = [
  "axbacktrace",
  "axconfig",
  "axdisplay",
+ "axdma",
  "axdriver",
  "axerrno 0.2.2",
  "axfeat",
