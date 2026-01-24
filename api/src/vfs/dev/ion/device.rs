@@ -1,15 +1,17 @@
 //! Ion 设备实现
 
 use super::buffer::IonBufferManager;
-use super::error::{IonError, IonResult};
+use super::error::IonResult;
 use super::heap::IonHeapManager;
 use super::types::*;
 use super::types::ioctl::*;
-use crate::vfs::DeviceOps;
-use alloc::sync::Arc;
+use starry_core::vfs::{DeviceMmap, DeviceOps};
+use memory_addr::PhysAddrRange;
 use axfs_ng_vfs::{NodeFlags, VfsResult};
 use core::any::Any;
 use core::ptr;
+
+use crate::file::{add_file_like, ion::{IonBufferFile, IonBufferInfo}};
 
 /// Ion 设备
 pub struct IonDevice {
@@ -45,13 +47,15 @@ impl IonDevice {
         };
         
         debug!(
-            "Alloc request: len={}, align={}, heap_id_mask=0x{:x}, flags=0x{:x}",
-            alloc_data.len, alloc_data.align, alloc_data.heap_id_mask, alloc_data.flags
+            "Alloc request: len={}, heap_id_mask=0x{:x}, flags=0x{:x}",
+            alloc_data.len, alloc_data.heap_id_mask, alloc_data.flags
         );
         
         // 选择堆类型（简化处理，优先选择 DMA coherent）
         let heap_type = if (alloc_data.heap_id_mask & (1 << IonHeapType::DmaCoherent as u32)) != 0 {
             IonHeapType::DmaCoherent
+        } else if (alloc_data.heap_id_mask & (1 << IonHeapType::Carveout as u32)) != 0 {
+            IonHeapType::Carveout
         } else if (alloc_data.heap_id_mask & (1 << IonHeapType::System as u32)) != 0 {
             IonHeapType::System
         } else {
@@ -62,7 +66,7 @@ impl IonDevice {
         // 分配缓冲区
         let buffer = self.heap_manager.alloc_buffer(
             alloc_data.len as usize,
-            alloc_data.align.max(1) as usize,
+            1,
             heap_type,
             IonFlags(alloc_data.flags),
         ).map_err(|e| axerrno::AxError::from(e))?;
@@ -71,16 +75,28 @@ impl IonDevice {
         self.buffer_manager.register_buffer(buffer.clone())
             .map_err(|e| axerrno::AxError::from(e))?;
         
-        // 返回结果（简化处理，直接返回 handle 作为 fd）
+        // 创建 IonBufferFile 并添加到文件描述符表
+        let phys_addr = buffer.dma_info.bus_addr.as_u64() as usize;
+        let buffer_info = IonBufferInfo {
+            phys_addr,
+            size: buffer.size,
+            handle: buffer.handle.as_u32(),
+        };
+        let ion_file = IonBufferFile::new(buffer_info);
+        let fd = add_file_like(alloc::sync::Arc::new(ion_file), false)
+            .map_err(|_| axerrno::AxError::TooManyOpenFiles)?;
+        
+        // 返回结果
         let mut result_data = alloc_data;
-        result_data.fd = buffer.handle.as_u32() as i32;
+        result_data.fd = fd as u32;
+        result_data.paddr = phys_addr as u64;
         
         unsafe {
             ptr::write(user_ptr as *mut IonAllocData, result_data);
         }
         
-        info!("Allocated Ion buffer: handle={}, size={}", 
-              result_data.fd, alloc_data.len);
+        info!("Allocated Ion buffer: fd={}, handle={}, phys_addr=0x{:x}, size={}", 
+              fd, buffer.handle.as_u32(), phys_addr, alloc_data.len);
         
         Ok(0)
     }
@@ -145,19 +161,48 @@ impl IonDevice {
             ptr::read(user_ptr as *const IonHeapQuery)
         };
         
-        debug!("Heap query request: cnt={}", heap_query.cnt);
+        debug!("Heap query request: cnt={}, heaps=0x{:x}", heap_query.cnt, heap_query.heaps);
         
-        // 获取支持的堆类型信息
+        // 定义支持的堆类型信息
         let supported_heaps = [
-            (IonHeapType::System, "system"),
-            (IonHeapType::DmaCoherent, "dma_coherent"),
-            (IonHeapType::Carveout, "carveout"),
+            (IonHeapType::System, "system", 0),
+            (IonHeapType::DmaCoherent, "dma_coherent", 1),
+            (IonHeapType::Carveout, "carveout", 2),
         ];
         
         let available_heap_count = supported_heaps.len() as u32;
+        let requested_count = heap_query.cnt.min(available_heap_count);
         
-        // 如果用户提供的缓冲区大小足够，我们可以填充堆信息
-        // 这里简化处理，只返回堆数量
+        // 如果用户提供了堆缓冲区指针，填充堆信息
+        if heap_query.heaps != 0 && requested_count > 0 {
+            let heap_data_ptr = heap_query.heaps as *mut IonHeapData;
+            
+            for (i, &(heap_type, name, heap_id)) in supported_heaps.iter().enumerate().take(requested_count as usize) {
+                let mut heap_data = IonHeapData {
+                    name: [0; MAX_HEAP_NAME],
+                    type_: heap_type as u32,
+                    heap_id,
+                    reserved0: 0,
+                    reserved1: 0,
+                    reserved2: 0,
+                };
+                
+                // 复制堆名称
+                let name_bytes = name.as_bytes();
+                let copy_len = name_bytes.len().min(MAX_HEAP_NAME - 1);
+                heap_data.name[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+                
+                // 写入堆数据
+                unsafe {
+                    ptr::write(heap_data_ptr.add(i), heap_data);
+                }
+                
+                info!("Added heap {}: type={}, heap_id={}, name={}", 
+                      i, heap_type as u32, heap_id, name);
+            }
+        }
+        
+        // 更新返回的堆数量
         heap_query.cnt = available_heap_count;
         
         // 写回结果
@@ -165,7 +210,8 @@ impl IonDevice {
             ptr::write(user_ptr as *mut IonHeapQuery, heap_query);
         }
         
-        info!("Heap query completed: {} heaps available", available_heap_count);
+        info!("Heap query completed: {} heaps available, {} requested", 
+              available_heap_count, requested_count);
         Ok(0)
     }
 }
@@ -183,10 +229,10 @@ impl DeviceOps for IonDevice {
     
     fn ioctl(&self, cmd: u32, arg: usize) -> VfsResult<usize> {
         match cmd {
+            ION_IOC_HEAP_QUERY => self.handle_heap_query(arg),
             ION_IOC_ALLOC => self.handle_alloc(arg),
             ION_IOC_FREE => self.handle_free(arg),
             ION_IOC_IMPORT => self.handle_import(arg),
-            ION_IOC_HEAP_QUERY => self.handle_heap_query(arg),
             _ => {
                 warn!("Unsupported Ion ioctl command: 0x{:x}", cmd);
                 Err(axerrno::AxError::Unsupported)
@@ -200,6 +246,37 @@ impl DeviceOps for IonDevice {
     
     fn flags(&self) -> NodeFlags {
         NodeFlags::NON_CACHEABLE
+    }
+
+    fn mmap(&self, offset: usize, length: usize) -> DeviceMmap {
+        // offset 被用作 Ion buffer 的 handle
+        // 用户空间通过 mmap(fd, offset=handle, ...) 来映射特定的 Ion buffer
+        let handle = IonHandle(offset as u32);
+        
+        match self.buffer_manager.get_buffer(handle) {
+            Ok(buffer) => {
+                // 获取缓冲区的物理地址
+                let phys_addr = buffer.dma_info.bus_addr.as_u64() as usize;
+                let size = if length > 0 { length.min(buffer.size) } else { buffer.size };
+                
+                debug!(
+                    "Ion mmap: handle={}, phys_addr=0x{:x}, size={}",
+                    offset, phys_addr, size
+                );
+                
+                // 标记缓冲区为已映射
+                buffer.set_mapped();
+                
+                DeviceMmap::Physical(PhysAddrRange::from_start_size(
+                    memory_addr::PhysAddr::from(phys_addr),
+                    size,
+                ))
+            }
+            Err(e) => {
+                warn!("Ion mmap failed: cannot find buffer with handle {}: {:?}", offset, e);
+                DeviceMmap::None
+            }
+        }
     }
 }
 

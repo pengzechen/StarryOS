@@ -127,16 +127,18 @@ unsafe impl Sync for IonBuffer {}
 pub struct IonAllocData {
     /// 请求的大小
     pub len: u64,
-    /// 对齐要求
-    pub align: u32,
     /// 堆掩码
     pub heap_id_mask: u32,
     /// 标志
     pub flags: u32,
     /// 返回的文件描述符
-    pub fd: i32,
+    pub fd: u32,
     /// 未使用字段
     pub unused: u32,
+    /// 物理地址
+    pub paddr: u64,
+    /// 缓冲区名称
+    pub name: [u8; MAX_ION_BUFFER_NAME],
 }
 
 /// Ion FD 数据（用于导入外部 fd）
@@ -157,6 +159,19 @@ pub struct IonHandleData {
     pub handle: u32,
 }
 
+pub const MAX_HEAP_NAME: usize = 32;
+pub const MAX_ION_BUFFER_NAME: usize = 32;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct IonHeapData {
+    pub name: [u8; MAX_HEAP_NAME],
+    pub type_: u32,
+    pub heap_id: u32,
+    pub reserved0: u32,
+    pub reserved1: u32,
+    pub reserved2: u32,
+}
+
 /// Ion 堆查询数据
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
@@ -165,12 +180,12 @@ pub struct IonHeapQuery {
     pub cnt: u32,
     /// 保留字段
     pub reserved0: u32,
+    /// 堆数据指针（用户空间地址）
+    pub heaps: u64,
     /// 保留字段
     pub reserved1: u32,
     /// 保留字段
     pub reserved2: u32,
-    /// 堆数据指针（用户空间地址）
-    pub heaps: u64,
 }
 
 /// Ion IOCTL 命令
@@ -182,12 +197,13 @@ pub mod ioctl {
     
     /// 分配内存
     pub const ION_IOC_ALLOC: u32 = ioctl_iowr!(ION_IOC_MAGIC, 0, IonAllocData);
+    /// 查询堆信息
+    pub const ION_IOC_HEAP_QUERY: u32 = ioctl_iowr!(ION_IOC_MAGIC, 8, IonHeapQuery);
+    
     /// 释放内存
     pub const ION_IOC_FREE: u32 = ioctl_iow!(ION_IOC_MAGIC, 1, IonHandleData);
     /// 导入 fd
     pub const ION_IOC_IMPORT: u32 = ioctl_iowr!(ION_IOC_MAGIC, 5, IonFdData);
-    /// 查询堆信息
-    pub const ION_IOC_HEAP_QUERY: u32 = ioctl_iowr!(ION_IOC_MAGIC, 8, IonHeapQuery);
 }
 
 /// IOCTL 宏定义

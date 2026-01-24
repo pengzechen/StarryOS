@@ -1,6 +1,7 @@
 pub mod epoll;
 pub mod event;
 mod fs;
+pub mod ion;
 mod net;
 mod pidfd;
 mod pipe;
