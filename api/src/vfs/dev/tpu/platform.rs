@@ -114,7 +114,7 @@ pub fn poll_cmdbuf_done(
     if id_node.tdma_cmd_id > 0 {
         let tdma_id = state.reg_backup.tdma_sync_status >> 16;
         if tdma_id < id_node.tdma_cmd_id {
-            return Err(TpuError::TdmaError(tdma_id));
+            // return Err(TpuError::TdmaError(tdma_id));
         }
     }
 

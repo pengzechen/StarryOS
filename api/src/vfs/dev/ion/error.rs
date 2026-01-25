@@ -1,7 +1,8 @@
 //! Ion 驱动错误类型定义
 
-use axerrno::AxError;
 use core::fmt;
+
+use axerrno::AxError;
 
 /// Ion 驱动错误类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

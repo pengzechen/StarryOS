@@ -1,5 +1,193 @@
 //! TPU 数据结构定义
 
+// ============================================================================
+// IOCTL 命令定义
+// ============================================================================
+
+/// IOCTL 基础命令号
+pub const IOCTL_TPU_BASE: u8 = b'p';
+
+/// 计算 _IOW 命令码 (写操作)
+const fn iow(ty: u8, nr: u8, size: usize) -> u32 {
+    // _IOW: direction = 1 (write)
+    (1u32 << 30) | ((size as u32) << 16) | ((ty as u32) << 8) | (nr as u32)
+}
+
+/// 计算 _IOWR 命令码 (读写操作)
+const fn iowr(ty: u8, nr: u8, size: usize) -> u32 {
+    // _IOWR: direction = 3 (read | write)
+    (3u32 << 30) | ((size as u32) << 16) | ((ty as u32) << 8) | (nr as u32)
+}
+
+/// 提交 DMA buffer 执行
+pub const CVITPU_SUBMIT_DMABUF: u32 = iow(IOCTL_TPU_BASE, 0x01, 8);
+/// 刷新 DMA buffer (通过 fd)
+pub const CVITPU_DMABUF_FLUSH_FD: u32 = iow(IOCTL_TPU_BASE, 0x02, 8);
+/// 无效化 DMA buffer (通过 fd)
+pub const CVITPU_DMABUF_INVLD_FD: u32 = iow(IOCTL_TPU_BASE, 0x03, 8);
+/// 刷新 DMA buffer (通过物理地址)
+pub const CVITPU_DMABUF_FLUSH: u32 = iow(IOCTL_TPU_BASE, 0x04, 8);
+/// 无效化 DMA buffer (通过物理地址)
+pub const CVITPU_DMABUF_INVLD: u32 = iow(IOCTL_TPU_BASE, 0x05, 8);
+/// 等待 DMA buffer 完成
+pub const CVITPU_WAIT_DMABUF: u32 = iowr(IOCTL_TPU_BASE, 0x06, 8);
+/// PIO 模式执行
+pub const CVITPU_PIO_MODE: u32 = iow(IOCTL_TPU_BASE, 0x07, 8);
+/// 加载 TEE
+pub const CVITPU_LOAD_TEE: u32 = iowr(IOCTL_TPU_BASE, 0x08, 8);
+/// 提交 TEE
+pub const CVITPU_SUBMIT_TEE: u32 = iow(IOCTL_TPU_BASE, 0x09, 8);
+/// 卸载 TEE
+pub const CVITPU_UNLOAD_TEE: u32 = iow(IOCTL_TPU_BASE, 0x0A, 8);
+/// 提交 PIO
+pub const CVITPU_SUBMIT_PIO: u32 = iow(IOCTL_TPU_BASE, 0x0B, 8);
+/// 等待 PIO
+pub const CVITPU_WAIT_PIO: u32 = iowr(IOCTL_TPU_BASE, 0x0C, 8);
+
+// ============================================================================
+// IOCTL 数据结构
+// ============================================================================
+
+/// 缓存操作参数
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CviCacheOpArg {
+    /// 物理地址
+    pub paddr: u64,
+    /// 大小
+    pub size: u64,
+    /// DMA 文件描述符
+    pub dma_fd: i32,
+    /// 填充对齐
+    pub _padding: i32,
+}
+
+/// 提交 DMA 参数
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CviSubmitDmaArg {
+    /// DMA buffer 文件描述符
+    pub fd: i32,
+    /// 序列号
+    pub seq_no: u32,
+}
+
+/// 等待 DMA 参数
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CviWaitDmaArg {
+    /// 序列号
+    pub seq_no: u32,
+    /// 返回值
+    pub ret: i32,
+}
+
+/// PIO 模式参数
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CviPioMode {
+    /// 命令缓冲区地址
+    pub cmdbuf: u64,
+    /// 大小
+    pub sz: u64,
+}
+
+/// 加载 TEE 参数
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CviLoadTeeArg {
+    /// REE 域命令缓冲区地址
+    pub cmdbuf_addr_ree: u64,
+    /// REE 域命令缓冲区长度
+    pub cmdbuf_len_ree: u32,
+    /// 填充
+    pub _pad1: u32,
+    /// REE 域权重地址
+    pub weight_addr_ree: u64,
+    /// REE 域权重长度
+    pub weight_len_ree: u32,
+    /// 填充
+    pub _pad2: u32,
+    /// REE 域神经元地址
+    pub neuron_addr_ree: u64,
+    /// TEE 域 DMA buffer 地址
+    pub dmabuf_addr_tee: u64,
+}
+
+/// 提交 TEE 参数
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CviSubmitTeeArg {
+    /// TEE DMA buffer 地址
+    pub dmabuf_tee_addr: u64,
+    /// 全局地址 base 2
+    pub gaddr_base2: u64,
+    /// 全局地址 base 3
+    pub gaddr_base3: u64,
+    /// 全局地址 base 4
+    pub gaddr_base4: u64,
+    /// 全局地址 base 5
+    pub gaddr_base5: u64,
+    /// 全局地址 base 6
+    pub gaddr_base6: u64,
+    /// 全局地址 base 7
+    pub gaddr_base7: u64,
+    /// 序列号
+    pub seq_no: u32,
+    /// 填充
+    pub _padding: u32,
+}
+
+/// 卸载 TEE 参数
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CviUnloadTeeArg {
+    /// 地址
+    pub addr: u64,
+    /// 大小
+    pub size: u64,
+}
+
+/// TDMA 复制参数
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CviTdmaCopyArg {
+    /// 源物理地址
+    pub paddr_src: u64,
+    /// 目标物理地址
+    pub paddr_dst: u64,
+    /// 高度
+    pub h: u32,
+    /// 宽度 (字节)
+    pub w_bytes: u32,
+    /// 源步长 (字节)
+    pub stride_bytes_src: u32,
+    /// 目标步长 (字节)
+    pub stride_bytes_dst: u32,
+    /// 启用 2D
+    pub enable_2d: u32,
+    /// 长度 (字节)
+    pub leng_bytes: u32,
+    /// 序列号
+    pub seq_no: u32,
+    /// 填充
+    pub _padding: u32,
+}
+
+/// TDMA 等待参数
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CviTdmaWaitArg {
+    /// 序列号
+    pub seq_no: u32,
+    /// 返回值
+    pub ret: i32,
+}
+
+// ============================================================================
+// DMA buffer 头部结构
+// ============================================================================
+
 /// DMA buffer 头部结构
 /// 对应 C 结构体 dma_hdr_t，大小 128 字节
 #[repr(C)]
@@ -67,7 +255,7 @@ impl DmaHeader {
 
     /// 检查 PMU buffer 是否有效且对齐
     pub fn has_valid_pmu(&self) -> bool {
-        self.pmubuf_offset != 0 
+        self.pmubuf_offset != 0
             && self.pmubuf_size != 0
             && (self.pmubuf_offset & 0xF) == 0
             && (self.pmubuf_size & 0xF) == 0
@@ -125,11 +313,11 @@ pub struct TpuPlatformCfg {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TpuPmuEvent {
     /// Bank 冲突
-    BankConflict = 0x0,
+    BankConflict    = 0x0,
     /// Stall 计数
-    StallCount = 0x1,
+    StallCount      = 0x1,
     /// TDMA 带宽
-    TdmaBandwidth = 0x2,
+    TdmaBandwidth   = 0x2,
     /// TDMA 写选通
     TdmaWriteStrobe = 0x3,
 }
@@ -223,36 +411,34 @@ impl TdmaReg {
         out[15] = (self.compress_bias0 & 0xFF)
             | ((self.compress_bias1 & 0xFF) << 8)
             | ((self.layer_id & 0xFFFF) << 16);
-        
-        out[14] = (self.src_c_stride_high & 0xFFFF)
-            | ((self.dst_c_stride_high & 0xFFFF) << 16);
-        
+
+        out[14] = (self.src_c_stride_high & 0xFFFF) | ((self.dst_c_stride_high & 0xFFFF) << 16);
+
         out[13] = (self.src_n & 0xFFFF)
             | ((self.dst_base_addr_high & 0xFF) << 16)
             | ((self.src_base_addr_high & 0xFF) << 24);
-        
+
         out[12] = self.src_base_addr_low;
         out[11] = self.dst_base_addr_low;
-        
+
         out[10] = (self.src_w & 0xFFFF) | ((self.src_h & 0xFFFF) << 16);
         out[9] = (self.dst_w & 0xFFFF) | ((self.dst_h & 0xFFFF) << 16);
         out[8] = (self.dst_c & 0xFFFF) | ((self.src_c & 0xFFFF) << 16);
-        
+
         out[7] = self.src_n_stride;
         out[6] = (self.src_h_stride & 0xFFFF) | ((self.src_c_stride_low & 0xFFFF) << 16);
         out[5] = self.dst_n_stride;
         out[4] = (self.dst_h_stride & 0xFFFF) | ((self.dst_c_stride_low & 0xFFFF) << 16);
-        
+
         out[3] = (self.const_val & 0xFFFF)
             | ((self.src_base_reg_sel & 0x7) << 16)
             | ((self.mv_lut_idx & 0x1) << 19)
             | ((self.dst_base_reg_sel & 0x7) << 20)
             | ((self.mv_lut_base & 0x1) << 23)
             | ((self.rsv4_5 & 0xFF) << 24);
-        
-        out[2] = (self.wait_id_other_tdma & 0xFFFF)
-            | ((self.wait_id_sdma & 0xFFFF) << 16);
-        
+
+        out[2] = (self.wait_id_other_tdma & 0xFFFF) | ((self.wait_id_sdma & 0xFFFF) << 16);
+
         out[1] = (self.spec_func & 0x7)
             | ((self.dst_fmt & 0x3) << 3)
             | ((self.src_fmt & 0x3) << 5)
@@ -263,7 +449,7 @@ impl TdmaReg {
             | ((self.compress_zero_guard & 0x1) << 14)
             | ((self.int8_rnd_mode & 0x1) << 15)
             | ((self.wait_id_tpu & 0xFFFF) << 16);
-        
+
         out[0] = (self.vld & 0x1)
             | ((self.compress_en & 0x1) << 1)
             | ((self.eod & 0x1) << 2)

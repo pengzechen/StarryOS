@@ -29,7 +29,7 @@
 //!     .flags = 0,
 //! };
 //! ioctl(ion_fd, ION_IOC_ALLOC, &alloc_data);
-//! 
+//!
 //! // 释放内存
 //! struct ion_handle_data handle_data = {
 //!     .handle = alloc_data.handle,
@@ -43,18 +43,31 @@ mod error;
 mod heap;
 mod types;
 
+use alloc::sync::Arc;
+use spin::Once;
+
+pub use buffer::IonBufferManager;
 pub use device::IonDevice;
 pub use error::{IonError, IonResult};
-pub use types::{IonHandle, IonHeapType, IonFlags};
+pub use types::{IonBuffer, IonFlags, IonHandle, IonHeapType};
 
+/// 全局共享的 Ion Buffer 管理器
+static GLOBAL_ION_BUFFER_MANAGER: Once<Arc<IonBufferManager>> = Once::new();
+
+/// 获取全局 Ion Buffer 管理器
+pub fn global_ion_buffer_manager() -> Arc<IonBufferManager> {
+    GLOBAL_ION_BUFFER_MANAGER
+        .call_once(|| Arc::new(IonBufferManager::new()))
+        .clone()
+}
 
 /// 初始化 Ion 驱动
 pub fn init_ion_driver() -> IonResult<()> {
     info!("Initializing Ion driver");
-    
+
     // 在这里可以添加额外的初始化逻辑
     // 比如初始化 carveout heap 等
-    
+
     info!("Ion driver initialized successfully");
     Ok(())
 }

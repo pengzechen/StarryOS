@@ -1,19 +1,20 @@
 //! Ion 驱动数据结构定义
 
 use alloc::sync::Arc;
-use axdma::DMAInfo;
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+
+use axdma::DMAInfo;
 
 /// Ion 堆类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum IonHeapType {
     /// 系统堆，使用普通的系统内存
-    System = 0,
+    System      = 0,
     /// DMA 堆，使用 DMA coherent 内存
     DmaCoherent = 1,
     /// Carveout 堆，预留的物理内存区域
-    Carveout = 2,
+    Carveout    = 2,
 }
 
 impl TryFrom<u32> for IonHeapType {
@@ -51,7 +52,7 @@ impl IonHandle {
         static COUNTER: AtomicU32 = AtomicU32::new(1);
         Self(COUNTER.fetch_add(1, Ordering::SeqCst))
     }
-    
+
     pub fn as_u32(self) -> u32 {
         self.0
     }
@@ -77,12 +78,7 @@ pub struct IonBuffer {
 }
 
 impl IonBuffer {
-    pub fn new(
-        dma_info: DMAInfo,
-        size: usize,
-        heap_type: IonHeapType,
-        flags: IonFlags,
-    ) -> Self {
+    pub fn new(dma_info: DMAInfo, size: usize, heap_type: IonHeapType, flags: IonFlags) -> Self {
         Self {
             handle: IonHandle::new(),
             dma_info,
@@ -93,24 +89,24 @@ impl IonBuffer {
             mapped: AtomicUsize::new(0),
         }
     }
-    
+
     pub fn inc_ref(&self) -> usize {
         self.ref_count.fetch_add(1, Ordering::SeqCst) + 1
     }
-    
+
     pub fn dec_ref(&self) -> usize {
         let old = self.ref_count.fetch_sub(1, Ordering::SeqCst);
         if old > 0 { old - 1 } else { 0 }
     }
-    
+
     pub fn ref_count(&self) -> usize {
         self.ref_count.load(Ordering::SeqCst)
     }
-    
+
     pub fn set_mapped(&self) {
         self.mapped.store(1, Ordering::SeqCst);
     }
-    
+
     pub fn is_mapped(&self) -> bool {
         self.mapped.load(Ordering::SeqCst) != 0
     }
@@ -191,15 +187,15 @@ pub struct IonHeapQuery {
 /// Ion IOCTL 命令
 pub mod ioctl {
     use super::*;
-    
+
     /// 魔数
     pub const ION_IOC_MAGIC: u8 = b'I';
-    
+
     /// 分配内存
     pub const ION_IOC_ALLOC: u32 = ioctl_iowr!(ION_IOC_MAGIC, 0, IonAllocData);
     /// 查询堆信息
     pub const ION_IOC_HEAP_QUERY: u32 = ioctl_iowr!(ION_IOC_MAGIC, 8, IonHeapQuery);
-    
+
     /// 释放内存
     pub const ION_IOC_FREE: u32 = ioctl_iow!(ION_IOC_MAGIC, 1, IonHandleData);
     /// 导入 fd
@@ -209,20 +205,31 @@ pub mod ioctl {
 /// IOCTL 宏定义
 macro_rules! ioctl_iowr {
     ($magic:expr, $nr:expr, $ty:ty) => {
-        (3u32 << 30) | (($magic as u32) << 8) | ($nr as u32) | ((core::mem::size_of::<$ty>() as u32) << 16)
+        (3u32 << 30)
+            | (($magic as u32) << 8)
+            | ($nr as u32)
+            | ((core::mem::size_of::<$ty>() as u32) << 16)
     };
 }
 
 macro_rules! ioctl_iow {
     ($magic:expr, $nr:expr, $ty:ty) => {
-        (1u32 << 30) | (($magic as u32) << 8) | ($nr as u32) | ((core::mem::size_of::<$ty>() as u32) << 16)
+        (1u32 << 30)
+            | (($magic as u32) << 8)
+            | ($nr as u32)
+            | ((core::mem::size_of::<$ty>() as u32) << 16)
     };
 }
 
 macro_rules! ioctl_ior {
     ($magic:expr, $nr:expr, $ty:ty) => {
-        (2u32 << 30) | (($magic as u32) << 8) | ($nr as u32) | ((core::mem::size_of::<$ty>() as u32) << 16)
+        (2u32 << 30)
+            | (($magic as u32) << 8)
+            | ($nr as u32)
+            | ((core::mem::size_of::<$ty>() as u32) << 16)
     };
 }
 
-pub(crate) use {ioctl_iowr, ioctl_iow, ioctl_ior};
+pub(crate) use ioctl_ior;
+pub(crate) use ioctl_iow;
+pub(crate) use ioctl_iowr;
