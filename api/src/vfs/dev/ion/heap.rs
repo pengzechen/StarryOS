@@ -90,16 +90,4 @@ impl IonHeapManager {
         unsafe { axdma::alloc_coherent(layout).map_err(|_| IonError::NoMemory) }
     }
 
-    /// 检查堆类型是否支持
-    pub fn is_heap_supported(&self, heap_type: IonHeapType) -> bool {
-        match heap_type {
-            IonHeapType::System | IonHeapType::DmaCoherent => true,
-            IonHeapType::Carveout => false, // 暂时不支持
-        }
-    }
-
-    /// 获取支持的堆掩码
-    pub fn supported_heap_mask(&self) -> u32 {
-        (1 << IonHeapType::System as u32) | (1 << IonHeapType::DmaCoherent as u32)
-    }
 }

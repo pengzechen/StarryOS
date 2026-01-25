@@ -9,7 +9,6 @@ use starry_core::vfs::{DeviceMmap, DeviceOps};
 
 use super::{
     buffer::IonBufferManager,
-    error::IonResult,
     global_ion_buffer_manager,
     heap::IonHeapManager,
     types::{ioctl::*, *},
@@ -34,16 +33,6 @@ impl IonDevice {
             heap_manager: IonHeapManager::new(),
             buffer_manager: global_ion_buffer_manager(),
         }
-    }
-
-    /// 初始化设备
-    pub fn init(&self) -> IonResult<()> {
-        info!("Initializing Ion device");
-        info!(
-            "Supported heap mask: 0x{:x}",
-            self.heap_manager.supported_heap_mask()
-        );
-        Ok(())
     }
 
     /// 处理 ION_IOC_ALLOC 命令

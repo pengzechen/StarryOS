@@ -438,7 +438,8 @@ impl TpuDevice {
         Ok(0)
     }
 
-    /// 刷新 DMA buffer 缓存 (通过 fd)
+    /// 刷新 DMA buffer 缓存 (通过 fd) 
+    /// todo: implement actual cache operations
     fn dmabuf_flush_fd(&self, arg: usize) -> Result<usize, TpuError> {
         let fd = arg as i32;
         debug!("TPU dmabuf flush fd: {}", fd);
@@ -463,6 +464,7 @@ impl TpuDevice {
     }
 
     /// 无效化 DMA buffer 缓存 (通过 fd)
+    /// todo: implement actual cache operations
     fn dmabuf_invld_fd(&self, arg: usize) -> Result<usize, TpuError> {
         let fd = arg as i32;
         debug!("TPU dmabuf invalidate fd: {}", fd);
@@ -470,7 +472,7 @@ impl TpuDevice {
         // 从 Ion 获取 buffer 并无效化
         if let Some(ref ion_manager) = self.ion_manager {
             let handle = IonHandle(fd as u32);
-            if let Ok(buffer) = ion_manager.get_buffer(handle) {
+            if let Ok(_buffer) = ion_manager.get_buffer(handle) {
                 #[cfg(target_arch = "riscv64")]
                 unsafe {
                     core::arch::asm!("fence iorw, iorw");

@@ -1,6 +1,5 @@
 //! Ion 驱动数据结构定义
 
-use alloc::sync::Arc;
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 use axdma::DMAInfo;
@@ -221,6 +220,7 @@ macro_rules! ioctl_iow {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! ioctl_ior {
     ($magic:expr, $nr:expr, $ty:ty) => {
         (2u32 << 30)
@@ -230,6 +230,5 @@ macro_rules! ioctl_ior {
     };
 }
 
-pub(crate) use ioctl_ior;
 pub(crate) use ioctl_iow;
 pub(crate) use ioctl_iowr;
