@@ -13,7 +13,6 @@
 
 5、上板进入uboot执行以下命令
 ```bash
-fatload mmc 0:1 0x89000000  ext4_100m.img
-fatload mmc 0:1 0x80200000 StarryOS_sg2002.bin
-go 0x80200000
+setenv starry 'fatload mmc 0:1 0x89000000 ext4_100m.img; fatload mmc 0:1 0x80200000 StarryOS_sg2002.bin; go 0x80200000'
+run starry
 ```
