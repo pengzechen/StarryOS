@@ -41,7 +41,7 @@ mod buffer;
 mod device;
 mod error;
 mod heap;
-mod types;
+pub mod types;
 
 use alloc::sync::Arc;
 use spin::Once;

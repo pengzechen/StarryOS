@@ -3,7 +3,7 @@
 #[cfg(feature = "input")]
 mod event;
 mod fb;
-mod ion;
+pub mod ion;
 #[cfg(feature = "dev-log")]
 mod log;
 mod r#loop;
@@ -18,11 +18,14 @@ use core::any::Any;
 
 use axerrno::AxError;
 use axfs_ng_vfs::{DeviceId, Filesystem, NodeFlags, NodeType, VfsResult};
-use axsync::Mutex;
+use axsync::{Mutex};
+use spin::Once;
 #[cfg(feature = "dev-log")]
 pub use log::bind_dev_log;
 use rand::{RngCore, SeedableRng, rngs::SmallRng};
 use starry_core::vfs::{Device, DeviceOps, DirMaker, DirMapping, SimpleDir, SimpleFs};
+
+pub static ION_DEVICE: Once<Arc<ion::IonDevice>> = Once::new();
 
 const RANDOM_SEED: &[u8; 32] = b"0123456789abcdef0123456789abcdef";
 
@@ -241,13 +244,15 @@ fn builder(fs: Arc<SimpleFs>) -> DirMaker {
     );
 
     // Ion device
+    let ion_device = Arc::new(ion::IonDevice::new());
+    ION_DEVICE.call_once(|| ion_device.clone());
     root.add(
         "ion",
         Device::new(
             fs.clone(),
             NodeType::CharacterDevice,
             DeviceId::new(10, 56), // Ion 设备的标准设备号
-            Arc::new(ion::IonDevice::new()),
+            ion_device,
         ),
     );
 

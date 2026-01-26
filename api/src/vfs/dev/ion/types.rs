@@ -185,7 +185,7 @@ pub struct IonHeapQuery {
 
 /// Ion IOCTL 命令
 pub mod ioctl {
-    use super::*;
+    pub use super::*;
 
     /// 魔数
     pub const ION_IOC_MAGIC: u8 = b'I';

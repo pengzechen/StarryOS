@@ -6,7 +6,13 @@ use alloc::borrow::Cow;
 
 use axerrno::AxResult;
 use axpoll::{IoEvents, Pollable};
+use starry_core::vfs::DeviceOps;
 use memory_addr::PhysAddrRange;
+
+use crate::vfs::dev::{
+    ion::types::ioctl::{IonHandleData, ION_IOC_FREE},
+    ION_DEVICE,
+};
 
 use super::{FileLike, Kstat};
 
@@ -81,3 +87,21 @@ impl FileLike for IonBufferFile {
         Cow::Borrowed("/dev/ion_buffer")
     }
 }
+
+
+impl Drop for IonBufferFile {
+    fn drop(&mut self) {
+        debug!("Dropping IonBufferFile, freeing handle: {}", self.info.handle);
+        if let Some(dev) = ION_DEVICE.get() {
+            let handle_data = IonHandleData {
+                handle: self.info.handle,
+            };
+            // 调用 ioctl 释放内存
+            // 这里忽略了返回值，因为在 drop 中很难处理错误
+            let _ = dev.ioctl(ION_IOC_FREE, &handle_data as *const _ as usize);
+        } else {
+            error!("Failed to find ion device to free buffer handle: {}", self.info.handle);
+        }
+    }
+}
+
